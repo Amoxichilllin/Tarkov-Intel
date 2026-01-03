@@ -6,7 +6,7 @@ A lightweight, browser-based tool to help track Escape from Tarkov quests, hideo
 **[Click Here to Open the Tool](https://amoxichilllin.github.io/Tarkov-Intel/)** *(Note: If the link doesn't work, ensure GitHub Pages is enabled in Settings)*
 
 ## Setup Guide (First Time Only)
-To sync your personal progression, you need a **Read-Only API Token** from TarkovTracker. This ensures the tool loads **your** quests, not mine.
+To sync your personal progression, you need a **Read-Only API Token** from TarkovTracker. This ensures the tool loads **your** quests.
 
 1. Go to [TarkovTracker.io Settings](https://tarkovtracker.io/settings/).
 2. Under "API Tokens", click **Create Token**.
