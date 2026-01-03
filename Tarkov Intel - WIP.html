@@ -1,0 +1,783 @@
+<!DOCTYPE html><html lang="en"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tarkov Intel - Stash Auditor (v13.0)</title>
+    <style>
+        :root {
+            --bg-main: #121212; --bg-card: #1e1e24; --bg-hover: #2a2a30; --bg-input: #25252b;
+            --text-main: #ffffff; --text-muted: #a1a1aa; --text-dim: #52525b; --border: #2d2d35;
+            --accent: #6366f1; --gold: #fbbf24; --green: #10b981; --danger: #ef4444;
+            --nav-height: 60px; --status-height: 40px; --col-width: 320px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; outline: none; }
+        body { background-color: var(--bg-main); color: var(--text-main); font-family: 'Inter', system-ui, sans-serif; height: 100vh; width: 100vw; overflow: hidden; display: flex; flex-direction: column; }
+
+        /* NAV */
+        nav { height: var(--nav-height); width: 100%; background: var(--bg-card); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; flex-shrink: 0; z-index: 100; }
+        .nav-left { display: flex; align-items: center; gap: 20px; }
+        .logo { font-weight: 800; color: var(--accent); font-size: 1.1rem; letter-spacing: -0.5px; }
+
+        /* CONTROLS */
+        .view-tabs, .filter-group { display: flex; background: var(--bg-input); border-radius: 6px; padding: 3px; border: 1px solid var(--border); }
+        .tab-btn, .filter-btn { background: transparent; border: none; color: var(--text-muted); padding: 6px 16px; cursor: pointer; font-size: 0.85rem; font-weight: 600; border-radius: 4px; transition: all 0.2s; }
+        .tab-btn:hover, .filter-btn:hover { color: var(--text-main); }
+        .tab-btn.active { background: var(--bg-hover); color: white; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+        .filter-btn.active { background: var(--accent); color: white; }
+
+        .btn { background: var(--bg-input); border: 1px solid var(--border); color: var(--text-main); padding: 7px 14px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 500; transition: all 0.2s; }
+        .btn:hover { border-color: var(--text-muted); background: var(--bg-hover); }
+        .btn-red { color: var(--danger); border-color: var(--danger); }
+        .btn-red:hover { background: rgba(239, 68, 68, 0.1); }
+        .btn-blue { color: var(--accent); border-color: var(--accent); }
+        .btn-blue:hover { background: rgba(99, 102, 241, 0.1); }
+        
+        .btn-sync { background: rgba(16, 185, 129, 0.1); border-color: var(--green); color: var(--green); transition: background 0.3s; }
+        .btn-sync:hover { background: rgba(16, 185, 129, 0.2); }
+        .btn-sync.success { background: var(--green); color: black; }
+
+        /* MAIN LAYOUT */
+        main { flex: 1; width: 100%; position: relative; background: var(--bg-main); overflow: hidden; display: flex; }
+        .view-container { display: none; height: 100%; width: 100%; }
+        .view-container.active { display: flex; }
+        
+        /* SCROLL VIEW */
+        .scroll-view { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; align-items: flex-start; }
+
+        /* AUDITOR VIEW */
+        #view-audit { flex-direction: column; align-items: center; padding: 40px 20px; overflow-y: auto; }
+        .audit-wrapper { max-width: 600px; width: 100%; display: flex; flex-direction: column; gap: 20px; }
+        .audit-search { width: 100%; background: var(--bg-card); border: 2px solid var(--border); border-radius: 8px; padding: 15px 20px; font-size: 1.2rem; color: var(--text-main); transition: border-color 0.2s; }
+        .audit-search:focus { border-color: var(--accent); }
+        
+        .audit-result { display: flex; flex-direction: column; gap: 15px; }
+        
+        .result-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 15px; display: flex; flex-direction: column; gap: 10px; }
+        .usage-list { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+        .usage-item { display: flex; align-items: center; justify-content: space-between; padding: 10px; background: var(--bg-input); border-radius: 4px; border-left: 3px solid var(--accent); }
+        .usage-item.completed { border-left-color: var(--green); opacity: 0.6; background: rgba(16, 185, 129, 0.05); }
+        
+        .usage-badge { font-size: 0.75rem; font-weight: 800; padding: 2px 6px; border-radius: 3px; margin-right: 8px; text-transform: uppercase; }
+        .badge-quest { background: var(--gold); color: black; }
+        .badge-hideout { background: var(--accent); color: white; }
+        
+        .status-badge { font-size: 0.7rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; margin-left: 8px; }
+        .status-active { background: rgba(239, 68, 68, 0.2); color: var(--danger); border: 1px solid var(--danger); }
+        .status-done { background: rgba(16, 185, 129, 0.2); color: var(--green); border: 1px solid var(--green); }
+
+        .safe-sell-banner { 
+            background: rgba(16, 185, 129, 0.1); border: 1px solid var(--green); color: var(--green);
+            padding: 10px; border-radius: 6px; text-align: center; font-weight: bold; font-size: 0.9rem;
+            margin-bottom: 10px;
+        }
+        
+        .not-found-msg {
+            color: var(--text-muted); text-align: center; font-style: italic; padding: 20px; border: 1px dashed var(--border); border-radius: 8px;
+        }
+
+        .wiki-link-audit { color: var(--text-muted); text-decoration: none; font-size: 0.8rem; margin-left: 10px; border: 1px solid var(--border); padding: 2px 6px; border-radius: 4px; transition: all 0.2s; }
+        .wiki-link-audit:hover { background: var(--accent); color: white; border-color: var(--accent); }
+
+        /* COLUMNS */
+        .column { flex: 0 0 var(--col-width); width: var(--col-width); border-right: 1px solid var(--border); display: flex; flex-direction: column; height: 100%; background: var(--bg-main); max-height: 100%; }
+        .col-header { padding: 12px 15px; background: var(--bg-card); border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; flex-shrink: 0; }
+        .header-top { display: flex; align-items: center; justify-content: space-between; }
+        .header-title-group { display: flex; align-items: center; gap: 10px; }
+        .col-img { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; background: #000; }
+        .col-title { font-size: 0.95rem; font-weight: 700; color: var(--text-main); }
+        .controls-row { display: flex; gap: 8px; align-items: center; }
+        .search-input { flex: 1; background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; color: var(--text-main); padding: 6px 10px; font-size: 0.8rem; transition: all 0.2s; min-width: 0; height: 32px; }
+        .search-input:focus { border-color: var(--accent); }
+        .sort-select { width: auto; min-width: 60px; height: 32px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; color: var(--text-muted); cursor: pointer; font-size: 0.8rem; padding: 0 4px; text-align: center; }
+        .sort-select:hover { color: var(--text-main); border-color: var(--text-muted); }
+        .sort-select option { background: var(--bg-card); color: var(--text-main); }
+        .list-container { flex: 1; overflow-y: auto; padding: 10px; scrollbar-width: thin; padding-bottom: 20px; }
+
+        /* CARDS */
+        .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 8px; transition: all 0.15s ease; }
+        .card:hover { border-color: #555; }
+        .card.checked { opacity: 0.5; background: var(--bg-main); }
+        .card-main { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+        .card-left { display: flex; align-items: center; gap: 12px; flex: 1; overflow: hidden; }
+        .checkbox-wrapper input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+        .card-name { font-size: 0.85rem; color: var(--text-main); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+        .wiki-link { color: var(--text-muted); font-size: 0.75rem; text-decoration: none; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: var(--bg-input); flex-shrink: 0; transition: all 0.2s; }
+        .wiki-link:hover { color: var(--text-main); background: var(--accent); }
+        .price-tag { font-size: 0.75rem; color: var(--text-muted); font-family: monospace; margin-top: 2px; }
+        
+        .key-icon { font-size: 0.8rem; margin-right: 6px; cursor: help; filter: drop-shadow(0 0 2px rgba(251, 191, 36, 0.3)); }
+        .tag-container { display:flex; gap:4px; margin-right:6px; display: inline-flex; }
+        .quest-tag { font-size: 0.6rem; color: #000; background: var(--gold); padding: 1px 4px; border-radius: 3px; font-weight: 800; }
+        .loot-tag { font-size: 0.6rem; color: #000; background: var(--green); padding: 1px 4px; border-radius: 3px; font-weight: 800; }
+        .loot-info { display: none; font-size: 0.75rem; color: #d1d5db; background: #27272a; padding: 8px 10px; border-radius: 4px; margin-top: 4px; border-left: 3px solid var(--accent); }
+        .card.expanded .loot-info { display: block; }
+        .expand-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.7rem; padding: 0 4px; margin-left: 4px; transition: color 0.2s; }
+        .expand-btn:hover { color: var(--accent); }
+
+        /* FOOTER */
+        footer { height: var(--status-height); width: 100%; background: var(--bg-card); border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; font-size: 0.8rem; color: var(--text-muted); position: relative; z-index: 100; }
+        
+        #loader { position: fixed; inset: 0; background: var(--bg-main); z-index: 2000; display: flex; align-items: center; justify-content: center; font-weight: 600; flex-direction: column; gap:10px; }
+        #error-msg { color: var(--danger); display: none; text-align: center; }
+        #loading-details { font-weight: 400; color: var(--text-muted); font-size: 0.9rem; }
+        
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-main); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    </style></head><body><div id="loader">
+    <div id="loading-text">Connecting to Tarkov API...</div>
+    <div id="loading-details">Please wait</div>
+    <div id="error-msg">
+        <div id="error-txt">Connection Failed</div>
+        <button class="btn" onclick="location.reload()" style="margin-top:10px">Retry</button>
+    </div></div>
+
+    <nav>
+    <div class="nav-left">
+        <div class="logo">Tarkov Intel</div>
+        <div class="view-tabs">
+            <button class="tab-btn active" onclick="switchView('quests')">Quests</button>
+            <button class="tab-btn" onclick="switchView('keys')">Keys</button>
+            <button class="tab-btn" id="audit-btn" onclick="switchView('audit')">Auditor</button>
+        </div>
+        <div class="filter-group" id="quest-filters">
+            <button class="filter-btn active" id="btn-all" onclick="setFilter('all')">All</button>
+            <button class="filter-btn" id="btn-kappa" onclick="setFilter('kappa')">Kappa</button>
+            <button class="filter-btn" id="btn-lk" onclick="setFilter('lightkeeper')">Lightkeeper</button>
+        </div>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px">
+        <button id="btn-sync" class="btn btn-sync" onclick="syncTracker()">Pull (Read Only)</button>
+        <button class="btn btn-blue" onclick="exportData()">Export</button>
+        <button class="btn btn-blue" onclick="importData()">Import</button>
+        <button class="btn" id="btn-hide" onclick="toggleHideDone()">
+            <span id="hide-text">Hide Done</span>
+        </button>
+        <button class="btn" onclick="undo()">Undo (<span id="undo-count">0</span>)</button>
+        <button class="btn btn-red" onclick="resetAll()">Reset</button>
+    </div></nav><main>
+    <div id="view-quests" class="view-container scroll-view active"></div>
+    <div id="view-keys" class="view-container scroll-view"></div>
+    
+    <div id="view-audit" class="view-container">
+        <div class="audit-wrapper">
+            <div style="text-align:center; color:var(--text-muted); margin-bottom:-10px; font-size:0.9rem">Stash Auditor (Junk Box Check)</div>
+            <input type="text" id="audit-input" class="audit-search" placeholder="Type item name (e.g. 'Bolts')..." oninput="handleAudit(this.value)">
+            <div id="audit-results" class="audit-result"></div>
+        </div>
+    </div></main><footer>
+    <div id="stats-text">Initialising...</div></footer><script>
+    
+    const QUEST_KEYS_DB = {
+        "Dorm room 314 marked key": "The Cult - Part 2", "RB-ST key": "Inventory Check", "RB-VO marked key": "Inventory Check", "RB-BK marked key": "Inventory Check", "RB-OB key": "Inventory Check", "Portable cabin key of Customs Factory zone": "Bad Rep Evidence", "Unknown key": "The Extortionist", "Machinery key": "Checking", "Tarcone Director's office key": "Delivery from the Past", "Dorm room 206 key": "Operation Aquarius - Part 1", "Dorm room 114 key": "Pharmacist", "Dorm room 214 key": "Shaking up the Teller", "Dorm room 303 key": "Golden Swag", "Dorm room 220 key": "Chemical - Part 1", "Trailer park portable cabin key": "Golden Swag", "Bunkhouse key": "Bad Rep Evidence", "RB-KSM key": "Disease History", "RB-SMP key": "Disease History", "Health Resort east wing room 306 key": "Cargo X - Part 1", "Health Resort west wing room 216 key": "Lend-Lease - Part 1", "Health Resort east wing room 328 key": "Wet Job - Part 5", "Health Resort west wing room 219 key": "Spa Tour - Part 4", "Health Resort west wing room 220 key": "Spa Tour - Part 4", "Key to OLI logistics department office": "Database - Part 1", "Key to IDEA power station": "Database - Part 2"
+    };
+    const QUEST_TO_KEY_DB = {}; 
+    Object.keys(QUEST_KEYS_DB).forEach(k => QUEST_TO_KEY_DB[QUEST_KEYS_DB[k]] = k);
+
+    const LOOT_DB = {
+        "Tarcone Director's office key": "1x Safe, 3x PC, Jacket, Loose Loot", "Dorm room 303 key": "1x Weapon Box (5x2), Loose Loot", "Dorm room 204 key": "1x Safe, 1x Weapon rack, Loose Loot", "Dorm room 214 key": "1x Safe, Loose Loot", "Dorm room 110 key": "1x Safe, 1x PC, Weapon spawn on bed", "Dorm room 114 key": "1x Safe, 1x PC, Medcase", "Dorm room 105 key": "1x Safe, Loose Loot", "Marked key": "High Tier Weapons, Keycards, Cases, Valuables", "Dorm room 314 marked key": "High Tier Weapons, Keycards, Cases", "Factory emergency exit key": "Extract Key (Factory/Customs)", "RB-VO marked key": "Marked Room: Weapons, Cases, Keytool", "RB-BK marked key": "Marked Room: Weapons, Cases, Keytool", "RB-KPRL key": "2x Safe, 1x Weapon Rack, Intel Spawn", "RB-AM key": "3x Toolsets, 2x Tech Crates, Intel Spawn", "RB-SMP key": "Medical Loot, Ophthalmoscope, LEDX chance", "RB-KSM key": "Medical Loot, Ophthalmoscope, LEDX chance", "RB-ST key": "Tank Battery, OFZ Shells, Weapon Boxes", "RB-RLSSA key": "Intel Spawns, High Tier Tech", "Key to KIBA store outlet": "High Tier Weapons, Attachments, Gen4 Armor", "Key to ULTRA medical storage unit": "LEDX, Defib, Ophthalmoscope, Stims", "Object #11SR keycard": "Safe, Weapon Box, Tech Loot, Extract", "Object #21WS keycard": "High Tier Weapons, Attachments, Troopers", "Sanitary standards - Part 1": "Quest Item Only", "Operating room key": "High tier meds, Intel", "Health Resort west wing room 301 key": "2x PC, LEDX Spawn, Loose Loot", "Health Resort west wing room 216 key": "Grenade Box, Weapon Boxes, LEDX", "Health Resort west wing room 220 key": "Weapon Box, Loose Loot, Quest Item", "Health Resort east wing room 222 key": "LedX Spawn, Rare Loose Loot, Weapon Rack", "Health Resort east wing room 310 key": "2x Gold Spawns (Bitcoins/Lions), Duffels", "Health Resort east wing room 328 key": "PC, Utility Key for adjacent room", "Cottage back door key": "Safe, PC, Weapon Rack, Loose Loot", "Chekannaya 15 apartment key": "High Tier Valuables, Rolers, Bitcoins", "Abandoned factory marked key": "Marked Room: Weapons, Cases", "Merin car trunk key": "Bitcoins, GP Coins, Rare Valuables", "Hillside house key": "Virtex, RFID, High Tech Loot", "Usef Grid key": "Weapon boxes, Loose loot", "Concordia 64 office room key": "Bitcoins, Rare Valuables, PC", "Necruspharm pharmacy key": "Stims, Meds, LEDX chance"
+    };
+
+    let data = { tasks: [], maps: [], keys: [], hideout: [], items: [] };
+    let questItemIds = new Set();
+    let validItemIndex = new Map();
+
+    let state = {
+        view: 'quests',
+        completedQuests: new Set(),
+        ownedKeys: new Set(),
+        expandedKeys: new Set(),
+        hideoutLevels: {},
+        filters: { kappa: false, lightkeeper: false, all: true, hideDone: false },
+        search: {},
+        sort: {},
+        undoStack: [],
+        trackerToken: ''
+    };
+
+    const DEFAULT_TRADERS = ['Prapor', 'Therapist', 'Skier', 'Peacekeeper', 'Mechanic', 'Ragman', 'Jaeger', 'Fence', 'Lightkeeper', 'Ref'];
+    const MAPS = ['Customs', 'Woods', 'Factory', 'Interchange', 'Reserve', 'Shoreline', 'Lighthouse', 'Streets of Tarkov', 'The Lab', 'Ground Zero'];
+    const LOOT_THRESHOLD = 75000;
+    
+    function setStatus(msg) { document.getElementById('loading-details').textContent = msg; }
+    function showError(err) { 
+        document.getElementById('loading-text').style.display = 'none'; 
+        document.getElementById('loading-details').style.display = 'none';
+        document.getElementById('error-txt').textContent = err;
+        document.getElementById('error-msg').style.display = 'block';
+    }
+
+    async function init() {
+        loadState();
+        
+        // 1. Critical Data (AllSettled)
+        const promises = [
+            fetchQuests().catch(e => console.error("Quests failed", e)),
+            fetchKeys().catch(e => console.error("Keys failed", e)),
+            fetchHideout().catch(e => console.error("Hideout failed", e))
+        ];
+        
+        await Promise.allSettled(promises);
+        
+        // 2. Render UI
+        if (data.tasks.length > 0) {
+            render();
+            document.getElementById('loader').style.display = 'none';
+            addScrollListeners();
+        } else {
+             let retries = 0;
+             const checkData = setInterval(() => {
+                 if(data.tasks.length > 0 || retries > 30) {
+                     clearInterval(checkData);
+                     render();
+                     document.getElementById('loader').style.display = 'none';
+                     addScrollListeners();
+                 }
+                 retries++;
+             }, 200);
+        }
+
+        // 3. Fetch Items (Background)
+        document.getElementById('audit-btn').textContent = "Auditor (Loading...)";
+        fetchMasterIndex().then(() => {
+            processQuestObjectives();
+            console.log("Index Ready: " + validItemIndex.size);
+            document.getElementById('audit-btn').textContent = `Auditor (${validItemIndex.size} Items)`;
+        });
+    }
+
+    function addScrollListeners() {
+        const containers = document.querySelectorAll('.scroll-view');
+        containers.forEach(cont => {
+            cont.addEventListener('wheel', (e) => {
+                if (!e.shiftKey) { }
+            });
+        });
+    }
+
+    async function fetchWithTimeout(resource, options = {}) {
+        const { timeout = 10000 } = options;
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), timeout);
+        const response = await fetch(resource, { ...options, signal: controller.signal });
+        clearTimeout(id);
+        return response;
+    }
+
+    async function fetchAllData() {
+        const q1 = fetchQuests();
+        const q2 = fetchKeys();
+        const q3 = fetchHideout();
+        const q4 = fetchMasterIndex();
+        await Promise.all([q1, q2, q3, q4]);
+        return true;
+    }
+
+    async function fetchQuests() {
+        setStatus("Fetching Quests...");
+        const query = `{ tasks(limit: 1000) { id name wikiLink kappaRequired lightkeeperRequired minPlayerLevel trader { name imageLink } taskRequirements { task { id } } objectives { ... on TaskObjectiveItem { count item { name id wikiLink } } } neededKeys { keys { name } } } }`;
+        const res = await fetchWithTimeout('https://api.tarkov.dev/graphql', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query })
+        });
+        const json = await res.json();
+        data.tasks = json.data.tasks || [];
+        return true;
+    }
+
+    async function fetchHideout() {
+        setStatus("Fetching Hideout...");
+        const query = `{ hideoutStations { id name levels { level itemRequirements { count item { name id wikiLink } } } } }`;
+        const res = await fetchWithTimeout('https://api.tarkov.dev/graphql', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query })
+        });
+        const json = await res.json();
+        data.hideout = json.data?.hideoutStations || [];
+        return true;
+    }
+
+    async function fetchKeys() {
+        setStatus("Fetching Keys...");
+        const query = `{ maps { name locks { key { id name shortName wikiLink lastLowPrice description } } } items(name: "Key", limit: 1000) { id name shortName wikiLink lastLowPrice types description usedInTasks { id } } }`;
+        const res = await fetchWithTimeout('https://api.tarkov.dev/graphql', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query })
+        });
+        const json = await res.json();
+        data.maps = json.data.maps || [];
+        data.keys = (json.data.items || []).filter(i => 
+            i.types.includes('keys') || i.types.includes('keycard') || i.name.toLowerCase().includes('key')
+        );
+        return true;
+    }
+    
+    // --- OPTIMIZED MASTER INDEX (NO FILTERS = D BATTERY WORKS) ---
+    async function fetchMasterIndex() {
+        setStatus("Fetching Item Index...");
+        const query = `{ items(limit: 10000) { id name wikiLink types } }`;
+        try {
+            const res = await fetchWithTimeout('https://api.tarkov.dev/graphql', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query })
+            });
+            const json = await res.json();
+            data.items = json.data.items || [];
+            return true;
+        } catch (e) { 
+            console.warn("Item Index failed");
+            return false; 
+        }
+    }
+    
+    function processQuestObjectives() {
+        questItemIds.clear();
+        validItemIndex.clear();
+
+        if(data.items.length > 0) {
+            data.items.forEach(i => {
+                const t = i.types || [];
+                const isHiddenType = t.includes('gun') || t.includes('modification') || t.includes('ammo') || t.includes('magazine');
+                
+                validItemIndex.set(i.name.toLowerCase(), {
+                    name: i.name,
+                    id: i.id,
+                    wikiLink: i.wikiLink,
+                    isHiddenType: isHiddenType 
+                });
+            });
+        }
+
+        data.tasks.forEach(t => {
+            if(t.objectives) {
+                t.objectives.forEach(obj => {
+                    if(obj.item && obj.item.id) {
+                        questItemIds.add(obj.item.id);
+                        if(!validItemIndex.has(obj.item.name.toLowerCase())) {
+                            validItemIndex.set(obj.item.name.toLowerCase(), {
+                                name: obj.item.name, id: obj.item.id, wikiLink: obj.item.wikiLink, isHiddenType: false
+                            });
+                        }
+                    }
+                });
+            }
+        });
+    }
+
+    async function syncTracker() {
+        const btn = document.getElementById('btn-sync');
+        let token = prompt("Enter TarkovTracker API Token:", state.trackerToken);
+        if(!token) return;
+        state.trackerToken = token;
+        saveState();
+        btn.textContent = "Pulling...";
+        try {
+            const res = await fetch('https://tarkovtracker.io/api/v2/progress', {
+                method: 'GET',
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            if(!res.ok) throw new Error("Invalid Token or CORS Error");
+            const json = await res.json();
+            
+            const newCompletedSet = new Set();
+            let added = 0;
+            
+            if(json.data && json.data.tasksProgress) {
+                json.data.tasksProgress.forEach(task => {
+                    if(task.complete) {
+                        newCompletedSet.add(task.id);
+                        added++;
+                    }
+                });
+            }
+            if(Array.isArray(json)) {
+                json.forEach(id => { 
+                    newCompletedSet.add(id);
+                    added++; 
+                });
+            }
+            
+            state.completedQuests = newCompletedSet;
+
+            if(json.data && json.data.hideoutModulesProgress) {
+                json.data.hideoutModulesProgress.forEach(mod => {
+                    if(mod.complete && mod.id) {
+                        const parts = mod.id.split('-');
+                        if(parts.length === 2) {
+                            const stId = parts[0];
+                            const lvl = parseInt(parts[1]);
+                            if(!isNaN(lvl)) {
+                                if(!state.hideoutLevels[stId] || lvl > state.hideoutLevels[stId]) {
+                                    state.hideoutLevels[stId] = lvl;
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            saveState();
+            render();
+            btn.textContent = "Success!";
+            btn.classList.add('success');
+            setTimeout(() => { btn.textContent = "Pull (Read Only)"; btn.classList.remove('success'); }, 3000);
+            alert(`Sync Complete!\n- Synced ${added} active completed quests.\n- Local state updated to match Server.`);
+        } catch(e) {
+            btn.textContent = "Error";
+            alert("Sync Failed (Read Only Mode): " + e.message + "\n\nNote: If this is a CORS error, you may need a browser extension to allow the request.");
+        }
+    }
+
+    function handleAudit(query) {
+        const resultsDiv = document.getElementById('audit-results');
+        resultsDiv.innerHTML = '';
+        if(!query || query.length < 2) return;
+        
+        const normQuery = query.toLowerCase();
+        
+        let matchedItems = [];
+        validItemIndex.forEach((val, key) => {
+            if(key.includes(normQuery)) matchedItems.push(val);
+        });
+
+        if(matchedItems.length === 0) {
+            resultsDiv.innerHTML = `<div class="not-found-msg">No items found matching "${query}"</div>`;
+            return;
+        }
+
+        if(matchedItems.length > 50) matchedItems = matchedItems.slice(0, 50);
+
+        matchedItems.forEach(itemInfo => {
+            let uses = [];
+            
+            data.tasks.forEach(t => {
+                if(!t.objectives) return;
+                let foundInThisQuest = new Set();
+                t.objectives.forEach(obj => {
+                    if(obj.item && obj.item.name === itemInfo.name) {
+                        if(foundInThisQuest.has(obj.item.name)) return; 
+                        foundInThisQuest.add(obj.item.name);
+                        const isCompleted = state.completedQuests.has(t.id);
+                        uses.push({ 
+                            type: 'quest', name: t.name, count: obj.count, 
+                            wikiLink: t.wikiLink, status: isCompleted ? 'done' : 'active'
+                        });
+                    }
+                });
+            });
+
+            data.hideout.forEach(station => {
+                const currentLevel = state.hideoutLevels[station.id] || 0;
+                station.levels.forEach(lvl => {
+                    const isBuilt = currentLevel >= lvl.level;
+                    lvl.itemRequirements.forEach(req => {
+                        if(req.item && req.item.name === itemInfo.name) {
+                            uses.push({ 
+                                type: 'hideout', name: `${station.name} Level ${lvl.level}`, count: req.count, 
+                                status: isBuilt ? 'done' : 'active'
+                            });
+                        }
+                    });
+                });
+            });
+
+            // Filter logic: if gun/mod and NO uses, skip
+            if(itemInfo.isHiddenType && uses.length === 0) return;
+
+            let activeCount = 0;
+            let listHtml = '';
+            const uniqueUses = new Map();
+            uses.forEach(u => uniqueUses.set(u.type + u.name, u));
+            const sortedUses = Array.from(uniqueUses.values()).sort((a, b) => (a.status === 'active' ? -1 : 1));
+
+            sortedUses.forEach(u => {
+                if(u.status === 'active') activeCount++;
+                const badgeClass = u.type === 'quest' ? 'badge-quest' : 'badge-hideout';
+                const statusBadge = u.status === 'active' ? `<span class="status-badge status-active">NEEDED</span>` : `<span class="status-badge status-done">FULFILLED</span>`;
+                const statusClass = u.status === 'active' ? '' : 'completed';
+                
+                let linkHtml = '';
+                if(u.type === 'quest' && u.wikiLink) {
+                    linkHtml = `<a href="${u.wikiLink}" target="_blank" class="wiki-link-audit">Wiki</a>`;
+                }
+
+                listHtml += `<div class="usage-item ${statusClass}">
+                    <div style="display:flex;align-items:center;flex-wrap:wrap">
+                        <span class="usage-badge ${badgeClass}">${u.type}</span>
+                        <span style="font-weight:600">${u.name}</span>
+                        ${linkHtml}
+                        ${statusBadge}
+                    </div>
+                    <span style="font-weight:bold; color:${u.status === 'active' ? 'var(--accent)' : 'var(--text-muted)'}">x${u.count}</span>
+                </div>`;
+            });
+
+            let bannerHtml = '';
+            if(sortedUses.length > 0 && activeCount === 0) {
+                bannerHtml = `<div class="safe-sell-banner">✓ SAFE TO SELL <span style="font-weight:normal;font-size:0.8rem;color:var(--text-muted)">(All known requirements fulfilled)</span></div>`;
+            } else if (sortedUses.length === 0) {
+                bannerHtml = `<div class="safe-sell-banner">✓ SAFE TO SELL <span style="font-weight:normal;font-size:0.8rem;color:var(--text-muted)">(No Quest/Hideout use)</span></div>`;
+            }
+
+            let itemWiki = itemInfo.wikiLink ? `<a href="${itemInfo.wikiLink}" target="_blank" class="wiki-link">Wiki</a>` : '';
+
+            resultsDiv.innerHTML += `<div class="result-card">
+                ${bannerHtml}
+                <div style="width:100%">
+                    <div style="font-weight:bold;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center; border-bottom:1px solid var(--border); padding-bottom:10px">
+                        <div style="display:flex;align-items:center;gap:10px;font-size:1.1rem">${itemInfo.name} ${itemWiki}</div>
+                        <span style="font-size:0.8rem;color:var(--text-muted)">Active: <span style="color:${activeCount>0?'var(--accent)':'white'}">${activeCount}</span></span>
+                    </div>
+                    <div class="usage-list">${listHtml}</div>
+                </div>
+            </div>`;
+        });
+    }
+
+    function render() {
+        if (state.view === 'quests') renderQuests();
+        else if (state.view === 'keys') renderKeys();
+        updateNavUI();
+    }
+
+    function switchView(viewName) {
+        state.view = viewName;
+        document.getElementById('quest-filters').style.display = viewName === 'quests' ? 'flex' : 'none';
+        document.querySelectorAll('.view-container').forEach(el => el.classList.remove('active'));
+        document.getElementById(`view-${viewName}`).classList.add('active');
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+        const btns = document.querySelectorAll('.tab-btn');
+        if(viewName === 'quests') btns[0].classList.add('active');
+        if(viewName === 'keys') btns[1].classList.add('active');
+        if(viewName === 'audit') btns[2].classList.add('active');
+        if(viewName === 'audit') setTimeout(() => document.getElementById('audit-input').focus(), 100);
+        render();
+    }
+
+    function sortItems(items, sortMode, type) {
+        if (!sortMode) return items;
+        return items.sort((a, b) => {
+            if (type === 'quests') {
+                if(sortMode == 'level_asc') return (a.minPlayerLevel || 0) - (b.minPlayerLevel || 0);
+                if(sortMode == 'level_desc') return (b.minPlayerLevel || 0) - (a.minPlayerLevel || 0);
+                return a.name.localeCompare(b.name);
+            } else {
+                if(sortMode == 'price_desc') return (b.lastLowPrice || 0) - (a.lastLowPrice || 0);
+                if(sortMode == 'price_asc') return (a.lastLowPrice || 0) - (b.lastLowPrice || 0);
+                return a.name.localeCompare(b.name);
+            }
+        });
+    }
+
+    function handleSort(colId, val) { state.sort[colId] = val; render(); }
+
+    function renderQuests() {
+        const container = document.getElementById('view-quests');
+        container.innerHTML = '';
+        const loadedTraders = [...new Set(data.tasks.map(t => t.trader.name))];
+        const allTraders = [...new Set([...DEFAULT_TRADERS, ...loadedTraders])];
+
+        allTraders.forEach(traderName => {
+            let quests = data.tasks.filter(t => t.trader.name === traderName);
+            if (!state.filters.all) quests = quests.filter(q => (state.filters.kappa && q.kappaRequired) || (state.filters.lightkeeper && q.lightkeeperRequired));
+            if (state.filters.hideDone) quests = quests.filter(q => !state.completedQuests.has(q.id));
+            if (state.search[traderName]) quests = quests.filter(q => q.name.toLowerCase().includes(state.search[traderName].toLowerCase()));
+
+            if(quests.length === 0 && !state.filters.all) return;
+
+            const sortMode = state.sort[traderName] || 'level_asc';
+            quests = sortItems(quests, sortMode, 'quests');
+
+            const col = document.createElement('div');
+            col.className = 'column';
+            const imgUrl = data.tasks.find(t => t.trader.name === traderName)?.trader.imageLink || '';
+
+            let listHtml = '';
+            quests.forEach(q => {
+                const isDone = state.completedQuests.has(q.id);
+                const lvl = q.minPlayerLevel ? `<span style="font-size:0.7rem; color:#666; margin-right:5px">L${q.minPlayerLevel}</span>` : '';
+                
+                let keyHtml = '';
+                let keyName = '';
+                if(q.neededKeys && q.neededKeys.length > 0) {
+                     const allKeys = q.neededKeys.flatMap(g => g.keys.map(k => k.name)).join(", ");
+                     if(allKeys) keyName = allKeys;
+                }
+                if(!keyName && QUEST_TO_KEY_DB[q.name]) {
+                    keyName = QUEST_TO_KEY_DB[q.name];
+                }
+                if(keyName) {
+                    keyHtml = `<span class="key-icon" title="Requires: ${keyName}">🔑</span>`;
+                }
+
+                listHtml += `
+                    <div class="card ${isDone ? 'checked' : ''}">
+                        <div class="card-main">
+                            <div class="card-left">
+                                <div class="checkbox-wrapper"><input type="checkbox" ${isDone ? 'checked' : ''} onchange="toggleQuest('${q.id}')"></div>
+                                <div class="card-name" onclick="toggleQuest('${q.id}')" title="${q.name}">
+                                    ${keyHtml}${lvl}${q.name}
+                                </div>
+                            </div>
+                            <a href="${q.wikiLink}" target="_blank" class="wiki-link">Wiki</a>
+                        </div>
+                    </div>`;
+            });
+
+            col.innerHTML = `<div class="col-header"><div class="header-top"><div class="header-title-group"><img src="${imgUrl}" class="col-img" onerror="this.style.display='none'"><span class="col-title">${traderName}</span></div></div><div class="controls-row"><input type="text" id="search-${traderName}" class="search-input" placeholder="Search..." oninput="state.search['${traderName}']=this.value;render()"><select class="sort-select" onchange="handleSort('${traderName}', this.value)"><option value="level_asc">Lv ↑</option><option value="level_desc">Lv ↓</option></select></div></div><div class="list-container">${listHtml}</div>`;
+            container.appendChild(col);
+        });
+        updateStats();
+    }
+
+    function renderKeys() {
+        const container = document.getElementById('view-keys');
+        container.innerHTML = '';
+        MAPS.forEach(mapName => {
+            let keys = [];
+            const mapData = data.maps.find(m => m.name.toLowerCase() === mapName.toLowerCase());
+            if(mapData && mapData.locks) {
+                keys = mapData.locks.map(l => l.key).filter(k => k != null);
+            }
+            if(keys.length === 0) {
+                keys = data.keys.filter(k => k.name.toLowerCase().includes(mapName.toLowerCase()));
+            }
+            const uniqueKeys = new Map();
+            keys.forEach(k => uniqueKeys.set(k.id, k));
+            keys = Array.from(uniqueKeys.values());
+
+            if (state.filters.hideDone) keys = keys.filter(k => !state.ownedKeys.has(k.id));
+            if (state.search[mapName]) keys = keys.filter(k => k.name.toLowerCase().includes(state.search[mapName].toLowerCase()));
+
+            const sortMode = state.sort[mapName] || 'price_desc';
+            keys = sortItems(keys, sortMode, 'keys');
+
+            const col = document.createElement('div');
+            col.className = 'column';
+            let listHtml = '';
+            
+            keys.forEach(k => {
+                const isOwned = state.ownedKeys.has(k.id);
+                const price = k.lastLowPrice ? Math.round(k.lastLowPrice).toLocaleString() + ' ₽' : 'N/A';
+                
+                const isQuestDerived = questItemIds.has(k.id);
+                const isQuestManual = QUEST_KEYS_DB[k.name] !== undefined;
+                const isQuest = isQuestDerived || isQuestManual;
+                const isLoot = (k.lastLowPrice && k.lastLowPrice > LOOT_THRESHOLD) || LOOT_DB[k.name];
+                
+                let tagsHtml = '';
+                if(isQuest) tagsHtml += `<span class="quest-tag">QUEST</span>`;
+                if(isLoot) tagsHtml += `<span class="loot-tag">LOOT</span>`;
+
+                listHtml += `
+                    <div class="card ${isOwned ? 'checked' : ''}">
+                        <div class="card-main">
+                            <div class="card-left">
+                                <div class="checkbox-wrapper"><input type="checkbox" ${isOwned ? 'checked' : ''} onchange="toggleKey('${k.id}')"></div>
+                                <div style="overflow:hidden">
+                                    <div class="card-name" title="${k.name}">
+                                        <div class="tag-container">${tagsHtml}</div>
+                                        ${k.name}
+                                    </div>
+                                    <div class="price-tag">${price}</div>
+                                </div>
+                            </div>
+                            <a href="${k.wikiLink}" target="_blank" class="wiki-link">Wiki</a>
+                        </div>
+                    </div>`;
+            });
+            col.innerHTML = `<div class="col-header"><div class="header-top"><span class="col-title">${mapName}</span></div></div><div class="list-container">${listHtml}</div>`;
+            container.appendChild(col);
+        });
+    }
+
+    function setFilter(type) {
+        if (type === 'all') { state.filters.all = true; state.filters.kappa = false; state.filters.lightkeeper = false; }
+        else { state.filters.all = false; state.filters[type] = !state.filters[type]; if(!state.filters.kappa && !state.filters.lightkeeper) state.filters.all=true; }
+        saveState(); render();
+    }
+
+    function toggleHideDone() { state.filters.hideDone = !state.filters.hideDone; document.getElementById('hide-text').textContent = state.filters.hideDone ? "Show Done" : "Hide Done"; saveState(); render(); }
+    
+    function toggleQuest(id, forceState = null, skipSync = false) {
+        let isChecking = forceState !== null ? forceState : !state.completedQuests.has(id);
+        const affected = new Set();
+        const collect = (qId) => {
+            if(affected.has(qId)) return;
+            affected.add(qId);
+            const task = data.tasks.find(t => t.id === qId);
+            if(task && task.taskRequirements) {
+                task.taskRequirements.forEach(req => { if(req.task && req.task.id) collect(req.task.id); });
+            }
+        };
+        if(isChecking) {
+            collect(id);
+            const currentTask = data.tasks.find(t => t.id === id);
+            if(currentTask && currentTask.name === "Collector") {
+                data.tasks.forEach(t => { if(t.kappaRequired) affected.add(t.id); });
+            }
+        } else { affected.add(id); }
+        affected.forEach(affId => {
+            if(isChecking) state.completedQuests.add(affId); else state.completedQuests.delete(affId);
+        });
+        saveState(); render(); updateStats();
+    }
+
+    function toggleKey(id) { const isChecking = !state.ownedKeys.has(id); if (isChecking) state.ownedKeys.add(id); else state.ownedKeys.delete(id); saveState(); render(); }
+    
+    function resetAll() { if(confirm("Reset all progress?")) { localStorage.clear(); location.reload(); } }
+    
+    function updateNavUI() {
+        document.getElementById('btn-all').classList.toggle('active', state.filters.all);
+        document.getElementById('btn-kappa').classList.toggle('active', state.filters.kappa);
+        document.getElementById('btn-lk').classList.toggle('active', state.filters.lightkeeper);
+        document.getElementById('btn-hide').style.color = state.filters.hideDone ? 'var(--text-main)' : 'var(--text-muted)';
+    }
+
+    function updateStats() {
+        const activeTasks = data.tasks.filter(q => {
+            if (state.filters.all) return true;
+            return (state.filters.kappa && q.kappaRequired) || (state.filters.lightkeeper && q.lightkeeperRequired);
+        });
+        const total = activeTasks.length;
+        const done = activeTasks.filter(q => state.completedQuests.has(q.id)).length;
+        const remaining = total - done;
+        const remColor = remaining > 0 ? 'var(--danger)' : 'var(--green)';
+        document.getElementById('stats-text').innerHTML = `Total: <strong style="color:#fff">${total}</strong> | Done: <strong style="color:var(--green)">${done}</strong> | Left: <strong style="color:${remColor}">${remaining}</strong>`;
+    }
+
+    function saveState() { 
+        localStorage.setItem('tb_ti_quests', JSON.stringify([...state.completedQuests])); 
+        localStorage.setItem('tb_ti_keys', JSON.stringify([...state.ownedKeys])); 
+        localStorage.setItem('tb_ti_filters', JSON.stringify(state.filters)); 
+        localStorage.setItem('tb_ti_hideout', JSON.stringify(state.hideoutLevels)); 
+        localStorage.setItem('tb_ti_token', state.trackerToken);
+    }
+    
+    function loadState() { 
+        const q = localStorage.getItem('tb_ti_quests'); if (q) state.completedQuests = new Set(JSON.parse(q)); 
+        const k = localStorage.getItem('tb_ti_keys'); if (k) state.ownedKeys = new Set(JSON.parse(k)); 
+        const f = localStorage.getItem('tb_ti_filters'); if (f) state.filters = JSON.parse(f);
+        const h = localStorage.getItem('tb_ti_hideout'); if (h) state.hideoutLevels = JSON.parse(h);
+        state.trackerToken = localStorage.getItem('tb_ti_token') || '';
+    }
+
+    function exportData() {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ completedQuests: [...state.completedQuests], ownedKeys: [...state.ownedKeys], hideoutLevels: state.hideoutLevels }));
+        const el = document.createElement('a'); el.setAttribute("href", dataStr); el.setAttribute("download", "tarkov_intel_backup.json"); document.body.appendChild(el); el.click(); el.remove();
+    }
+    function importData() {
+        const input = document.createElement('input'); input.type = 'file'; input.accept = '.json';
+        input.onchange = e => {
+            const file = e.target.files[0]; const reader = new FileReader(); reader.readAsText(file, 'UTF-8');
+            reader.onload = re => {
+                try { 
+                    const json = JSON.parse(re.target.result); 
+                    if(json.completedQuests) state.completedQuests = new Set(json.completedQuests); 
+                    if(json.hideoutLevels) state.hideoutLevels = json.hideoutLevels; 
+                    saveState(); render(); alert("Restored!"); 
+                } catch(e) {}
+            };
+        }; input.click();
+    }
+
+    init();</script></body></html>
